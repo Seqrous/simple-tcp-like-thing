@@ -5,13 +5,18 @@ import socket
 import struct
 
 SERVER_HOST = 'localhost'
-SERVER_PORT = 4040
+SERVER_PORT = 80
 
 HOST = 'localhost'
-PORT = 4080
+PORT = 4000
 
-with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-    s.bind((HOST, PORT))
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as conn:
+    conn.settimeout(30.0)
+    conn.bind((HOST, PORT))
     seq_number = int(struct.unpack('I', randbytes(4))[0])  # 32bit int
-    ack_datagram = Datagram(PORT, SERVER_PORT, seq_number, 0, True, False, False, False)
-    s.sendto(ack_datagram.pack(), (SERVER_HOST, SERVER_PORT))
+    syn_datagram = Datagram(PORT, SERVER_PORT, seq_number, 0, True, False, False, False)
+    conn.sendto(syn_datagram.pack(), (SERVER_HOST, SERVER_PORT)) # SYN to welcome socket
+    msg, addr = conn.recvfrom(1024)
+    print(f"Got message from {addr}")
+    datagram = Datagram.unpack(msg)
+    print(f"{datagram=}")
