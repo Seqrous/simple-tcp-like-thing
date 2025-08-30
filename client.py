@@ -10,4 +10,5 @@ PORT = 400
 
 if __name__ == "__main__":
     tcp_connector = TCPConnector(HOST, PORT)
-    tcp_connector.connect((SERVER_HOST, SERVER_PORT))
+    conn = tcp_connector.connect((SERVER_HOST, SERVER_PORT))
+    conn.send(b'Hello World')

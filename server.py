@@ -8,4 +8,6 @@ PORT = 80
 if __name__ == "__main__":
     tcp_listener = TCPListener(HOST, PORT)
     tcp_listener.listen()
-    tcp_listener.accept()
+    conn = tcp_listener.accept()
+    msg = conn.recv(1024)
+    print(f"{msg=}")

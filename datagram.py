@@ -13,8 +13,9 @@ class Datagram:
     ack: bool
     fin: bool
     rst: bool
+    data: bytes
 
-    FORMAT = 'HHIIB'
+    FORMAT = 'HHIIB 255s'
 
     def pack(self) -> bytes:
         flags = (
@@ -29,7 +30,8 @@ class Datagram:
             self.destination_port,
             self.seq_number,
             self.ack_number,
-            flags
+            flags,
+            self.data
         )
 
     @classmethod
@@ -44,7 +46,8 @@ class Datagram:
             syn=_get_bit(flags, 0),
             ack=_get_bit(flags, 1),
             fin=_get_bit(flags, 2),
-            rst=_get_bit(flags, 3)
+            rst=_get_bit(flags, 3),
+            data=unpacked[5]
         )
 
 

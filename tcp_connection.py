@@ -30,7 +30,7 @@ class TCPConnector:
             self._socket.close()
             raise
 
-        return TCPConnection(self._socket, self._server_addr, self._seq_number, self._ack_number)
+        return TCPConnection(self._socket, (self.host, self.port), (self._server_addr[0], resp.source_port), self._seq_number, self._ack_number)
 
     def _request_syn(self):
         print("SYN request")
@@ -44,7 +44,8 @@ class TCPConnector:
             syn=True,
             ack=False,
             fin=False,
-            rst=False
+            rst=False,
+            data=b''
         )
         self._socket.sendto(syn_datagram.pack(), self._server_addr)
         self._seq_number += 1
@@ -78,7 +79,8 @@ class TCPConnector:
             syn=False,
             ack=True,
             fin=False,
-            rst=False
+            rst=False,
+            data=b''
         )
         self._socket.sendto(ack_datagram.pack(), (self._server_addr[0], resp.source_port))
 
@@ -91,8 +93,8 @@ class TCPListener:
         self._client_addr: tuple[str, int] = tuple()
         self._seq_number: int = 0
         self._ack_number: int = 0
-        self._wcm_socket: socket = None
-        self._conn: socket = None
+        self._wcm_socket: socket.socket = None
+        self._conn: socket.socket = None
         self._syn_datagram: Datagram = None
 
     def listen(self) -> None:
@@ -138,7 +140,8 @@ class TCPListener:
             syn=True,
             ack=False,
             fin=False,
-            rst=False
+            rst=False,
+            data=b''
         )
         self._wcm_socket.sendto(syn_ack_datagram.pack(), self._client_addr)
         self._seq_number += 1
@@ -153,21 +156,36 @@ class TCPListener:
         print(f"{ack_datagram=}")
         if not ack_datagram.syn and ack_datagram.ack and ack_datagram.ack_number == self._seq_number:
             print("Handshake successful")
-            return TCPConnection(self._conn, self._client_addr, self._seq_number, self._ack_number)
+            return TCPConnection(self._conn, (self.host, self.port), self._client_addr, self._seq_number, self._ack_number)
 
         raise Exception("Invalid ACK datagram received during handshake")
 
 
 class TCPConnection:
 
-    def __init__(self, sock: socket.socket, remote_addr: tuple[str, int], seq_number: int, ack_number: int):
+    def __init__(self, sock: socket.socket, addr: tuple[str, int], remote_addr: tuple[str, int], seq_number: int, ack_number: int):
         self._socket = sock
+        self._addr = addr
         self._rmt_addr = remote_addr
         self._seq_number = seq_number
         self._ack_number = ack_number
 
     def send(self, data: bytes):
-        raise NotImplementedError()
+        self._ack_number + len(data)
+        datagram = Datagram(
+            source_port=self._addr[1],
+            destination_port=self._rmt_addr[1],
+            seq_number=self._seq_number,
+            ack_number=self._ack_number,
+            syn=False,
+            ack=True,
+            fin=False,
+            rst=False,
+            data=data
+        )
+        self._socket.sendto(datagram.pack(), self._rmt_addr)
 
     def recv(self, buff_size: int) -> bytes:
-        raise NotImplementedError()
+        msg = self._socket.recv(buff_size)
+        datagram = Datagram.unpack(msg)
+        return datagram.data
