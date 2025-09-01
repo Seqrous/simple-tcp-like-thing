@@ -4,7 +4,7 @@ import socket
 import struct
 from random import randbytes
 
-from datagram import Datagram
+from datagram import Datagram, TCPFlag
 
 
 class TCPConnector:
@@ -41,10 +41,7 @@ class TCPConnector:
             destination_port=self._server_addr[1],
             seq_number=self._seq_number,
             ack_number=self._ack_number,
-            syn=True,
-            ack=False,
-            fin=False,
-            rst=False,
+            flags=TCPFlag.SYN,
             data=b''
         )
         self._socket.sendto(syn_datagram.pack(), self._server_addr)
@@ -63,8 +60,12 @@ class TCPConnector:
         print(f"{syn_ack_datagram=}")
 
         self._socket.settimeout(None)  # reset timeout
+
+        if not syn_ack_datagram.has_exact_flags(TCPFlag.SYN | TCPFlag.ACK):
+            raise Exception(f"Expected a SYN-ACK response from the server, got {syn_ack_datagram.flags.name}")
+
         if syn_ack_datagram.ack_number != self._seq_number:
-            raise Exception("un-ACKed response from the server")
+            raise Exception("NACKed response from the server")
 
         return syn_ack_datagram
 
@@ -76,10 +77,7 @@ class TCPConnector:
             destination_port=resp.source_port,
             seq_number=self._seq_number,
             ack_number=self._ack_number,
-            syn=False,
-            ack=True,
-            fin=False,
-            rst=False,
+            flags=TCPFlag.ACK,
             data=b''
         )
         self._socket.sendto(ack_datagram.pack(), (self._server_addr[0], resp.source_port))
@@ -110,7 +108,7 @@ class TCPListener:
                     syn_datagram = Datagram.unpack(msg)
                     print(f"{syn_datagram=}")
 
-                    if syn_datagram.syn:
+                    if syn_datagram.has_exact_flags(TCPFlag.SYN):
                         self._syn_datagram = syn_datagram
                         self._client_addr = addr
                         return
@@ -137,10 +135,7 @@ class TCPListener:
             destination_port=self._syn_datagram.source_port,
             seq_number=self._seq_number,
             ack_number=self._syn_datagram.seq_number + 1,
-            syn=True,
-            ack=False,
-            fin=False,
-            rst=False,
+            flags=TCPFlag.SYN | TCPFlag.ACK,
             data=b''
         )
         self._wcm_socket.sendto(syn_ack_datagram.pack(), self._client_addr)
@@ -154,7 +149,7 @@ class TCPListener:
 
         ack_datagram = Datagram.unpack(ack_msg)
         print(f"{ack_datagram=}")
-        if not ack_datagram.syn and ack_datagram.ack and ack_datagram.ack_number == self._seq_number:
+        if ack_datagram.has_exact_flags(TCPFlag.ACK) and ack_datagram.ack_number == self._seq_number:
             print("Handshake successful")
             return TCPConnection(self._conn, (self.host, self.port), self._client_addr, self._seq_number, self._ack_number)
 
@@ -171,16 +166,13 @@ class TCPConnection:
         self._ack_number = ack_number
 
     def send(self, data: bytes):
-        self._ack_number + len(data)
+        self._ack_number += len(data)
         datagram = Datagram(
             source_port=self._addr[1],
             destination_port=self._rmt_addr[1],
             seq_number=self._seq_number,
             ack_number=self._ack_number,
-            syn=False,
-            ack=True,
-            fin=False,
-            rst=False,
+            flags=TCPFlag.ACK,
             data=data
         )
         self._socket.sendto(datagram.pack(), self._rmt_addr)
@@ -188,4 +180,8 @@ class TCPConnection:
     def recv(self, buff_size: int) -> bytes:
         msg = self._socket.recv(buff_size)
         datagram = Datagram.unpack(msg)
+
         return datagram.data
+
+    def set_timeout(self, value: int | None) -> None:
+        self._socket.settimeout(value)
