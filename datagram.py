@@ -22,29 +22,33 @@ class Datagram:
     flags: TCPFlag
     data: bytes
 
-    FORMAT = 'HHIIB 255s'
+    HEADER_FORMAT = 'HHIIB'
+    HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 
     def pack(self) -> bytes:
-        return struct.pack(
-            self.FORMAT,
-            self.source_port,
+        header = struct.pack(
+            self.HEADER_FORMAT,
+        self.source_port,
             self.destination_port,
             self.seq_number,
             self.ack_number,
-            self.flags,
-            self.data
+            self.flags
         )
+        return header + self.data
 
     @classmethod
-    def unpack(cls, data: bytes) -> Datagram:
-        unpacked = struct.unpack(cls.FORMAT, data)
+    def unpack(cls, payload: bytes) -> Datagram:
+        header_bytes = payload[:cls.HEADER_SIZE]
+        data_bytes = payload[cls.HEADER_SIZE:]
+
+        headers = struct.unpack(cls.HEADER_FORMAT, header_bytes)
         return cls(
-            source_port=unpacked[0],
-            destination_port=unpacked[1],
-            seq_number=unpacked[2],
-            ack_number=unpacked[3],
-            flags=TCPFlag(unpacked[4]),
-            data=unpacked[5]
+            source_port=headers[0],
+            destination_port=headers[1],
+            seq_number=headers[2],
+            ack_number=headers[3],
+            flags=TCPFlag(headers[4]),
+            data=data_bytes
         )
 
     def has_exact_flags(self, flags: TCPFlag) -> bool:
