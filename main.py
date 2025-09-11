@@ -1,8 +1,9 @@
+import threading
 import time
 
+from tcp_connection.client import Connector
 from tcp_connection.server import ConnectionListener
-from tcp_connection_v2 import ConnectionContext, Address
-import threading
+from tcp_connection_v2 import Address
 
 SERVER_HOST = 'localhost'
 SERVER_PORT = 80
@@ -12,13 +13,15 @@ CLIENT_HOST = 'localhost'
 CLIENT_PORT = 400
 CLIENT_ADDR = Address(host=CLIENT_HOST, port=CLIENT_PORT)
 
+
 def run_server():
     s = ConnectionListener(SERVER_ADDR).listen()
     conn = s.accept()
 
+
 def run_client():
-    client = ConnectionContext(CLIENT_ADDR)
-    client.connect(SERVER_ADDR)
+    s = Connector(CLIENT_ADDR)
+    conn = s.connect(SERVER_ADDR)
 
 
 if __name__ == "__main__":

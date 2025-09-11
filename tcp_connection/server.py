@@ -4,8 +4,7 @@ import struct
 from random import randbytes
 
 from datagram import Datagram, TCPFlag
-from tcp_connection.utils import seq_increment
-from tcp_connection_v2 import Address
+from tcp_connection.utils import seq_increment, Address
 
 
 class ConnectionListener:
@@ -113,4 +112,3 @@ class _ServerSideConnection:
 
     def __init__(self, addr: Address, peer_addr: Address, seq_number: int, ack_number: int, conn: socket.socket):
         print("Server: Connection established")
-

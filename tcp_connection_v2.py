@@ -3,19 +3,13 @@ from __future__ import annotations
 import abc
 import socket
 import struct
+import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from enum import Enum
 from random import randbytes
 
 from datagram import Datagram, TCPFlag
-import threading
-
-
-@dataclass
-class Address:
-    host: str
-    port: int
+from tcp_connection.utils import Address
 
 
 class TCPStateName(Enum):

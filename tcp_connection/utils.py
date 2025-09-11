@@ -1,4 +1,12 @@
+from dataclasses import dataclass
+
 from datagram import TCPFlag
+
+
+@dataclass
+class Address:
+    host: str
+    port: int
 
 
 def seq_increment(flags: TCPFlag, data: bytes) -> int:
