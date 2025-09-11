@@ -1,5 +1,6 @@
 import time
 
+from tcp_connection.server import ConnectionListener
 from tcp_connection_v2 import ConnectionContext, Address
 import threading
 
@@ -12,8 +13,8 @@ CLIENT_PORT = 400
 CLIENT_ADDR = Address(host=CLIENT_HOST, port=CLIENT_PORT)
 
 def run_server():
-    server = ConnectionContext(SERVER_ADDR)
-    server.listen()
+    s = ConnectionListener(SERVER_ADDR).listen()
+    conn = s.accept()
 
 def run_client():
     client = ConnectionContext(CLIENT_ADDR)
@@ -21,7 +22,7 @@ def run_client():
 
 
 if __name__ == "__main__":
-    server_task = threading.Thread(target=run_server, name="Server")
+    server_task = threading.Thread(target=run_server)
     client_task = threading.Thread(target=run_client, name="Client")
 
     server_task.start()
