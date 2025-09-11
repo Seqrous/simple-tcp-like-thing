@@ -9,6 +9,7 @@ from enum import Enum
 from random import randbytes
 
 from datagram import Datagram, TCPFlag
+import threading
 
 
 @dataclass
@@ -52,8 +53,9 @@ class ConnectionContext:
     rmt_addr: Address
     seq_number: int = 0
     ack_number: int = 0
+    host_name: str  # just logging
 
-    syn_dgram: Datagram # part of the listener (used in listen and SYN-ACK)
+    syn_dgram: Datagram  # part of the listener (used in listen and SYN-ACK)
 
     _state: State
     _state_name: TCPStateName
@@ -65,20 +67,21 @@ class ConnectionContext:
         self._state_factory = StateFactory()
         self._state = None
         self._state_name = None
+        self.host_name = threading.current_thread().name
 
     def set_state(self, new_state_name: TCPStateName):
         # for debugging
         if self._state_name is None:
-            print(f"No current state, setting {new_state_name.name}")
+            print(f"[{self.host_name}]: No current state, setting {new_state_name.name}")
         else:
-            print(f"Changing state from {self._state_name.name} to {new_state_name.name}")
+            print(f"[{self.host_name}]: Changing state from {self._state_name.name} to {new_state_name.name}")
 
         self._state = self._state_factory.create(name=new_state_name)
         self._state.set_context(self)
         self._state_name = new_state_name
 
     def connect(self, rmt_addr: Address):
-        print("[Client]: Attempting to establish connection...")
+        print(f"[{self.host_name}]: Attempting to establish connection...")
         self.rmt_addr = rmt_addr
         self.conn_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.conn_socket.bind((self.addr.host, self.addr.port))
@@ -86,7 +89,7 @@ class ConnectionContext:
         self.handle()
 
     def listen(self):
-        print("[Server]: Listening for connections...")
+        print(f"[{self.host_name}]: Listening for connections...")
         self.wcm_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.wcm_socket.bind((self.addr.host, self.addr.port))
         self.set_state(new_state_name=TCPStateName.LISTEN)
@@ -112,7 +115,7 @@ class ClosedState(State):
         # TODO: might want to introduce another method/protocol for this
         if self._ctx.closed:
             self._ctx.seq_number = int(struct.unpack('I', randbytes(4))[0])  # 32bit int
-            print(f"[Client]: Client's SEQ number: {self._ctx.seq_number}")
+            print(f"[{self._ctx.host_name}]: SEQ number: {self._ctx.seq_number}")
             dgram = Datagram(
                 source_port=self._ctx.addr.port,
                 destination_port=self._ctx.rmt_addr.port,
@@ -128,6 +131,7 @@ class ClosedState(State):
 
         # TODO: otherwise, request closure
 
+
 class ListenState(State):
 
     def handle(self) -> None:
@@ -139,9 +143,9 @@ class ListenState(State):
             while True:
                 try:
                     payload, addr = self._ctx.wcm_socket.recvfrom(1024)
-                    print(f"[Server]: Got message from {addr}")
+                    print(f"[{self._ctx.host_name}]: Got message from {addr}")
                     dgram = Datagram.unpack(payload)
-                    print(f"[Server]: {dgram=}")
+                    print(f"[{self._ctx.host_name}]: {dgram=}")
 
                     if dgram.has_exact_flags(TCPFlag.SYN):
                         self._ctx.rmt_addr = Address(addr[0], addr[1])
@@ -149,7 +153,7 @@ class ListenState(State):
                         # TODO: at some point, spawn another thread to keep listening for other SYN requests
                         break
 
-                    print("[Server]: Ignoring non-SYN msg")
+                    print(f"[{self._ctx.host_name}]: Ignoring non-SYN msg")
 
                 except socket.timeout:
                     continue
@@ -158,27 +162,28 @@ class ListenState(State):
             self._ctx.handle()
 
         except KeyboardInterrupt:
-            print("[Server]: Shutting down gracefully")
+            print(f"[{self._ctx.host_name}]: Shutting down gracefully")
             self._ctx.wcm_socket.close()
+
 
 class SynSentState(State):
 
     def handle(self) -> None:
-        print("[Client]: awaiting SYN-ACK...")
+        print(f"[{self._ctx.host_name}]: awaiting SYN-ACK...")
         self._ctx.conn_socket.settimeout(1.0)
         try:
             payload = self._ctx.conn_socket.recv(1024)
         except socket.timeout:
-            raise Exception("[Client]: Timeout waiting for SYN-ACK from the peer")
+            raise Exception(f"[{self._ctx.host_name}]: Timeout waiting for SYN-ACK from the peer")
         self._ctx.conn_socket.settimeout(None)
 
         dgram = Datagram.unpack(payload)
-        print(f"[Client]: {dgram=}")
+        print(f"[{self._ctx.host_name}]: {dgram=}")
         if not dgram.has_exact_flags(TCPFlag.SYN | TCPFlag.ACK):
-            raise Exception(f"[Client]: Expected a SYN-ACK response from the peer, got {dgram.flags.name}")
+            raise Exception(f"[{self._ctx.host_name}]: Expected a SYN-ACK response from the peer, got {dgram.flags.name}")
 
         if dgram.ack_number != self._ctx.seq_number:
-            raise Exception(f"[Client]: unACKed response from the peer - expected {self._ctx.seq_number}, got {dgram.ack_number}")
+            raise Exception(f"[{self._ctx.host_name}]: unACKed response from the peer - expected {self._ctx.seq_number}, got {dgram.ack_number}")
 
         self._ctx.ack_number = dgram.seq_number
 
@@ -208,7 +213,7 @@ class SynReceivedState(State):
         self._ctx.addr = Address(self._ctx.addr.host, conn_port)
 
         self._ctx.seq_number = int(struct.unpack('I', randbytes(4))[0])  # 32bit int
-        print(f"[Server]: Server's SEQ number: {self._ctx.seq_number}")
+        print(f"[{self._ctx.host_name}]: SEQ number: {self._ctx.seq_number}")
         dgram = Datagram(
             source_port=conn_port,
             destination_port=self._ctx.rmt_addr.port,
@@ -225,15 +230,15 @@ class SynReceivedState(State):
         try:
             payload = self._ctx.conn_socket.recv(1024)
         except socket.timeout:
-            raise Exception("[Server]: Timeout waiting for SYN-ACK from the peer")
+            raise Exception(f"[{self._ctx.host_name}]: Timeout waiting for SYN-ACK from the peer")
         self._ctx.conn_socket.settimeout(None)
 
         dgram = Datagram.unpack(payload)
         if not dgram.has_exact_flags(TCPFlag.ACK):
-            raise Exception(f"[Server]: Expected an ACK response from the peer, got {dgram.flags.name}")
+            raise Exception(f"[{self._ctx.host_name}]: Expected an ACK response from the peer, got {dgram.flags.name}")
 
         if dgram.ack_number != self._ctx.seq_number:
-            raise Exception(f"[Server]: unACKed response from the peer - expected {self._ctx.seq_number}, got {dgram.ack_number}")
+            raise Exception(f"[{self._ctx.host_name}]: unACKed response from the peer - expected {self._ctx.seq_number}, got {dgram.ack_number}")
 
         self._ctx.set_state(TCPStateName.ESTABLISHED)
         self._ctx.handle()
@@ -242,7 +247,7 @@ class SynReceivedState(State):
 class EstablishedState(State):
 
     def handle(self) -> None:
-        print("Connection established :)")
+        print(f"[{self._ctx.host_name}]: Connection established :)")
 
 
 def _seq_increment(flags: TCPFlag, data: bytes) -> int:

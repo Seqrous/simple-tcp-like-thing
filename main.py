@@ -11,11 +11,19 @@ CLIENT_HOST = 'localhost'
 CLIENT_PORT = 400
 CLIENT_ADDR = Address(host=CLIENT_HOST, port=CLIENT_PORT)
 
-server = ConnectionContext(SERVER_ADDR)
-client = ConnectionContext(CLIENT_ADDR)
-server_task = threading.Thread(target=server.listen)
-client_task = threading.Thread(target=client.connect, args=(SERVER_ADDR,))
+def run_server():
+    server = ConnectionContext(SERVER_ADDR)
+    server.listen()
 
-server_task.start()
-time.sleep(0.2)
-client_task.start()
+def run_client():
+    client = ConnectionContext(CLIENT_ADDR)
+    client.connect(SERVER_ADDR)
+
+
+if __name__ == "__main__":
+    server_task = threading.Thread(target=run_server, name="Server")
+    client_task = threading.Thread(target=run_client, name="Client")
+
+    server_task.start()
+    time.sleep(0.2)
+    client_task.start()
